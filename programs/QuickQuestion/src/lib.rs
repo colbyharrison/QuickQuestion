@@ -40,7 +40,7 @@ pub struct Bounty {
     pub questioner_key: Pubkey,
 }
 
-#[account(zero_copy)]
+#[zero_copy]
 pub struct Answer {
     //byte requirement = 2500+32+1 = 2533
     pub response: [u8; 2500], //limit to 2500 chars

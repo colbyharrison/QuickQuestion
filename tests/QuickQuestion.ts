@@ -9,9 +9,22 @@ describe('QuickQuestion', () => {
 
   const program = anchor.workspace.QuickQuestion as Program<QuickQuestion>;
 
-  it('Is initialized!', async () => {
+  it('Bounty made', async () => {
     // Add your test here.
-    const tx = await program.rpc.initialize({});
+    const tx = await program.rpc.makeBounty({});
     console.log("Your transaction signature", tx);
   });
+
+  it('Bounty closed', async () => {
+    // Add your test here.
+    const tx = await program.rpc.closeBounty({});
+    console.log("Your transaction signature", tx);
+  });
+
+  it('Answer accepted', async () => {
+    // Add your test here.
+    const tx = await program.rpc.acceptAnswer({});
+    console.log("Your transaction signature", tx);
+  });
+
 });
