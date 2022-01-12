@@ -5,14 +5,30 @@ declare_id!("3nwtVSUXMNeFYDA4dXrSLb8qYwMXwm1CaEoho5PRW2aH");
 #[program]
 pub mod quick_question {
     use super::*;
-    pub fn initialize(ctx: Context<Initialize>) -> ProgramResult {
+    pub fn make_bounty(ctx: Context<MakeBounty>) -> ProgramResult {
+        Ok(())
+    }
+
+    pub fn close_bounty(ctx: Context<CloseBounty>) -> ProgramResult {
+        Ok(())
+    }
+
+    pub fn accept_answer(ctx: Context<AcceptAnswer>) -> ProgramResult {
         Ok(())
     }
 }
 
 #[derive(Accounts)]
-pub struct Initialize {}
+pub struct MakeBounty {}
 
+#[derive(Accounts)]
+pub struct CloseBounty {}
+
+#[derive(Accounts)]
+pub struct AcceptAnswer {}
+
+//as these accounts will be quite large we must use zero-copy as to not violate
+//stack and heap limitations. 4KB Stack and 32 KB heap
 #[account(zero_copy)]
 pub struct Bounty {
     pub title: [u8; 50],      //limit to 50 chars
@@ -24,8 +40,6 @@ pub struct Bounty {
     pub questioner_key: Pubkey,
 }
 
-//as these accounts will be quite large we must use zero-copy as to not violate
-//stack and heap limitations. 4KB Stack and 32 KB heap
 #[account(zero_copy)]
 pub struct Answer {
     //byte requirement = 2500+32+1 = 2533
