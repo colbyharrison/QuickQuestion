@@ -27,4 +27,10 @@ describe('QuickQuestion', () => {
     console.log("Your transaction signature", tx);
   });
 
+  it('Answer posted', async () => {
+    // Add your test here.
+    const tx = await program.rpc.postAnswer({});
+    console.log("Your transaction signature", tx);
+  });
+
 });
