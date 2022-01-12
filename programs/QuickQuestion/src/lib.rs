@@ -42,7 +42,7 @@ pub struct MakeBounty<'info> {
         seeds = [bounty.key().as_ref()],
         bump = bounty_tokens_bump,
         token::mint = bounty_mint,
-        token::authority = bounty_tokens,
+        token::authority = bounty_tokens, //we're using the token account as authority over itself...
     )]
     bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens
     bounty_mint: Account<'info, Mint>, //the minter for the token, not sure this is really needed...
