@@ -4,12 +4,16 @@ use anchor_spl::{
     token::{Mint, Token, TokenAccount},
 };
 
-declare_id!("3nwtVSUXMNeFYDA4dXrSLb8qYwMXwm1CaEoho5PRW2aH");
+declare_id!("G2HtxxNKWLSLjxL6dGf3Y9SgQtmaANMSZqUmPAugHu1r");
 
 #[program]
 pub mod quick_question {
     use super::*;
-    pub fn make_bounty(ctx: Context<MakeBounty>) -> ProgramResult {
+    pub fn post_bounty(ctx: Context<PostBounty>, bump: u8) -> ProgramResult {
+        Ok(())
+    }
+
+    pub fn create_bounty_history(ctx: Context<CreateBountyHistory>) -> ProgramResult {
         Ok(())
     }
 
@@ -31,11 +35,12 @@ pub mod quick_question {
 
 #[derive(Accounts)]
 #[instruction(bounty_tokens_bump: u8)]
-pub struct MakeBounty<'info> {
-    #[account(init, payer = questioner, space = 28000)]
-    bounty: AccountLoader<'info, Bounty>,
-    #[account(signer)]
-    questioner: Account<'info, Questioner>,
+pub struct PostBounty<'info> {
+    #[account(init, payer = questioner, space = 500)]
+    bounty: Account<'info, Questioner>,
+    #[account(mut)]
+    questioner: Signer<'info>,
+    questioner_tokens: Account<'info, TokenAccount>,
     #[account(
         init,
         payer = questioner,
@@ -47,8 +52,14 @@ pub struct MakeBounty<'info> {
     bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens
     bounty_mint: Account<'info, Mint>, //the minter for the token, not sure this is really needed...
     token_program: Program<'info, Token>,
-    system_program: AccountInfo<'info>,
+    system_program: Program<'info, System>,
     rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct CreateBountyHistory<'info> {
+    #[account(zero)]
+    bounty: AccountLoader<'info, Bounty>,
 }
 
 #[derive(Accounts)]
@@ -68,6 +79,7 @@ pub struct Questioner {
 }
 
 #[account]
+#[derive(Default)]
 pub struct Responder {
     name: String,
     authority: Pubkey,

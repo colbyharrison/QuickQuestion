@@ -13,7 +13,7 @@ describe('QuickQuestion', () => {
   const program = anchor.workspace.QuickQuestion as Program<QuickQuestion>;
 
   let bountyMint: spl.Token;
-  let bountyTokens: anchor.web3.PublicKey;
+  let questionerTokens: anchor.web3.PublicKey;
 
   before(async () => {
 
@@ -27,14 +27,44 @@ describe('QuickQuestion', () => {
       spl.TOKEN_PROGRAM_ID
     );
 
-    bountyTokens = await bountyMint.createAssociatedTokenAccount(program.provider.wallet.publicKey);
+    questionerTokens = await bountyMint.createAssociatedTokenAccount(program.provider.wallet.publicKey);
 
-    await bountyMint.mintTo(bountyTokens, program.provider.wallet.publicKey, [], 1000);
+    await bountyMint.mintTo(questionerTokens, program.provider.wallet.publicKey, [], 1000);
   });
 
-  it('Bounty made', async () => {
-    // Add your test here.
-    const tx = await program.rpc.makeBounty({});
+  it('Bounty created', async () => {
+    const bountyLogger = anchor.web3.Keypair.generate();
+    await program.rpc.createBounty({
+      accounts: {
+        bounty: bountyLogger.publicKey
+      },
+      instructions: [
+        await program.account.bounty.createInstruction(bountyLogger),
+      ],
+      signers: [bountyLogger]
+    });
+  });
+
+  it('Bounty posted', async () => {
+
+    const bounty = anchor.web3.Keypair.generate();
+    const [bountyTokens, bountiedTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
+      [bounty.publicKey.toBuffer()],
+      program.programId
+    );
+    const tx = await program.rpc.postBounty(bountiedTokensBump, {
+      accounts: {
+        bounty: bounty.publicKey,
+        questioner: program.provider.wallet.publicKey,
+        questionerTokens: questionerTokens,
+        bountyTokens: bountyTokens,
+        bountyMint: bountyMint.publicKey,
+        tokenProgram: spl.TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        systemProgram: anchor.web3.SystemProgram.programId
+      },
+      signers: [bounty]
+    });
     console.log("Your transaction signature", tx);
   });
 
