@@ -34,9 +34,6 @@ describe('QuickQuestion', () => {
 
   it('Bounty posted', async () => {
 
-    let rentCalc = await anchor.getProvider().connection.getMinimumBalanceForRentExemption(28000, 'confirmed');
-    console.log(rentCalc / anchor.web3.LAMPORTS_PER_SOL) // 10240 = .07216128 (10 usd) sol 28000 = .19577 (27 usd) 
-
     const bounty = anchor.web3.Keypair.generate();
     const [bountyTokens, bountiedTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
       [bounty.publicKey.toBuffer()],

@@ -26,8 +26,6 @@ pub mod quick_question {
         bounty.questioner_key = ctx.accounts.questioner.key();
         bounty.bounty_tokens_bump = bump;
 
-        //Todo transfer bounty into escrow
-
         anchor_spl::token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
@@ -83,28 +81,14 @@ pub struct PostBounty<'info> {
 }
 
 #[derive(Accounts)]
+//There must be some financial disincentive to posting willy nilly. The responder must pay some sol to answer
+pub struct PostAnswer {}
+
+#[derive(Accounts)]
 pub struct CloseBounty {}
 
 #[derive(Accounts)]
 pub struct AcceptAnswer {}
-
-#[derive(Accounts)]
-pub struct PostAnswer {}
-
-#[account]
-pub struct Questioner {
-    name: String,
-    authority: Pubkey,
-    bump: u8,
-}
-
-#[account]
-#[derive(Default)]
-pub struct Responder {
-    name: String,
-    authority: Pubkey,
-    bump: u8,
-}
 
 #[account]
 pub struct Answer {
