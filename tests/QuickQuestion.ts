@@ -12,13 +12,13 @@ describe('QuickQuestion', () => {
 
   const program = anchor.workspace.QuickQuestion as Program<QuickQuestion>;
 
-  let bountyMint: spl.Token;
+  let questionerMint: spl.Token;
   let questionerTokens: anchor.web3.PublicKey;
 
   before(async () => {
 
     const wallet = program.provider.wallet as NodeWallet;
-    bountyMint = await spl.Token.createMint(
+    questionerMint = await spl.Token.createMint(
       program.provider.connection,
       wallet.payer,
       wallet.publicKey,
@@ -27,9 +27,9 @@ describe('QuickQuestion', () => {
       spl.TOKEN_PROGRAM_ID
     );
 
-    questionerTokens = await bountyMint.createAssociatedTokenAccount(program.provider.wallet.publicKey);
+    questionerTokens = await questionerMint.createAssociatedTokenAccount(program.provider.wallet.publicKey);
 
-    await bountyMint.mintTo(questionerTokens, program.provider.wallet.publicKey, [], 1000);
+    await questionerMint.mintTo(questionerTokens, program.provider.wallet.publicKey, [], anchor.web3.LAMPORTS_PER_SOL * 10);
   });
 
   it('Bounty posted', async () => {
@@ -48,7 +48,6 @@ describe('QuickQuestion', () => {
     const amount = new anchor.BN(anchor.web3.LAMPORTS_PER_SOL);
     const timeline = new anchor.BN(200);
 
-
     const tx = await program.rpc.postBounty(
       bountiedTokensBump, title, question, amount, timeline, {
       accounts: {
@@ -56,7 +55,7 @@ describe('QuickQuestion', () => {
         questioner: program.provider.wallet.publicKey,
         questionerTokens: questionerTokens,
         bountyTokens: bountyTokens,
-        bountyMint: bountyMint.publicKey,
+        questionerMint: questionerMint.publicKey,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         systemProgram: anchor.web3.SystemProgram.programId
@@ -72,7 +71,9 @@ describe('QuickQuestion', () => {
     assert.equal(bnty.title, title);
     assert.equal(bnty.question, question);
     assert.ok(bnty.questionerKey.equals(program.provider.wallet.publicKey))
-    console.log("Bounty", bnty);
+
+    const escrowedTokens = (await questionerMint.getAccountInfo(bountyTokens))
+    assert.equal(anchor.web3.LAMPORTS_PER_SOL, escrowedTokens.amount.toNumber())
   });
 
   it('Bounty closed', async () => {

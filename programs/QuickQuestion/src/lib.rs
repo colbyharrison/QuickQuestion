@@ -27,7 +27,18 @@ pub mod quick_question {
         bounty.bounty_tokens_bump = bump;
 
         //Todo transfer bounty into escrow
-        Ok(())
+
+        anchor_spl::token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx.accounts.questioner_tokens.to_account_info(),
+                    to: ctx.accounts.bounty_tokens.to_account_info(),
+                    authority: ctx.accounts.questioner.to_account_info(),
+                },
+            ),
+            bounty_lamports,
+        )
     }
 
     pub fn close_bounty(ctx: Context<CloseBounty>) -> ProgramResult {
@@ -54,17 +65,18 @@ pub struct PostBounty<'info> {
     bounty: Account<'info, Bounty>,
     #[account(mut)]
     questioner: Signer<'info>,
+    #[account(mut, constraint = questioner_tokens.mint == questioner_mint.key())]
     questioner_tokens: Account<'info, TokenAccount>,
     #[account(
         init,
         payer = questioner,
         seeds = [bounty.key().as_ref()],
         bump = bounty_tokens_bump,
-        token::mint = bounty_mint,
+        token::mint = questioner_mint,
         token::authority = bounty_tokens, //we're using the token account as authority over itself...
     )]
     bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens
-    bounty_mint: Account<'info, Mint>,
+    questioner_mint: Account<'info, Mint>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
     rent: Sysvar<'info, Rent>,
