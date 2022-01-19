@@ -111,22 +111,29 @@ describe('QuickQuestion', () => {
       program.programId
     );
 
+    const response = " This is an answer";
+    const collateral = new anchor.BN(anchor.web3.LAMPORTS_PER_SOL);
+
+
     // Add your test here.
-    const tx = await program.rpc.postAnswer(answeredTokensBump, {
+    const tx = await program.rpc.postAnswer(answeredTokensBump, response, collateral, {
       accounts: {
         answer: answer.publicKey,
         responder: program.provider.wallet.publicKey,
+        bounty: bounty.publicKey,
         responderTokens: responderTokens,
-        //bounty: bounty,
         answerTokens: answerTokens,
         responderMint: responderMint.publicKey,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        systemProgram: anchor.web3.SystemProgram.programId
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY
       },
       signers: [answer]
     });
-    console.log("Your transaction signature", tx);
+    const an = await program.account.answer.fetch(answer.publicKey);
+    // const bnty = await program.account.answer.fetch(bounty.publicKey);
+
+    console.log(an);
   });
 
 });

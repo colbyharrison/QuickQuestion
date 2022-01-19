@@ -47,8 +47,34 @@ pub mod quick_question {
         Ok(())
     }
 
-    pub fn post_answer(ctx: Context<PostAnswer>, bump: u8) -> ProgramResult {
-        Ok(())
+    pub fn post_answer(
+        ctx: Context<PostAnswer>,
+        bump: u8,
+        response: String,
+        collateral_lamports: u64,
+    ) -> ProgramResult {
+        let answer = &mut ctx.accounts.answer;
+        answer.response = response;
+        answer.reponder_key = ctx.accounts.responder.key();
+        answer.was_accepted = false;
+        answer.collateral_amount = collateral_lamports;
+
+        let bounty = &mut ctx.accounts.bounty;
+
+        bounty.answers.push(answer.key());
+
+        //transfer responder collateral into "escrow"
+        anchor_spl::token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx.accounts.responder_tokens.to_account_info(),
+                    to: ctx.accounts.answer_tokens.to_account_info(),
+                    authority: ctx.accounts.responder.to_account_info(),
+                },
+            ),
+            collateral_lamports,
+        )
     }
 
     // TODO: Not completely trustless if I need to rely on the client to call
@@ -84,11 +110,12 @@ pub struct PostBounty<'info> {
 #[instruction(answer_tokens_bump: u8)]
 //There must be some financial disincentive to posting willy nilly. The responder must pay some sol to answer
 pub struct PostAnswer<'info> {
-    #[account(init, payer = responder, space = 291)]
+    #[account(init, payer = responder, space = 300)]
     answer: Account<'info, Answer>,
     #[account(mut)]
     responder: Signer<'info>,
-    //bounty: AccountInfo<'info, Bounty>,
+    #[account(mut)]
+    bounty: Account<'info, Bounty>,
     #[account(mut, constraint = responder_tokens.mint == responder_mint.key())]
     responder_tokens: Account<'info, TokenAccount>,
     #[account(
@@ -115,10 +142,11 @@ pub struct AcceptAnswer {}
 
 #[account]
 pub struct Answer {
-    //total 283
+    //total 283 + 8
     pub response: String, //limit to 250 chars
     pub reponder_key: Pubkey,
     was_accepted: bool,
+    collateral_amount: u64,
 }
 
 #[account]
@@ -128,7 +156,7 @@ pub struct Bounty {
     pub question: String, //limit to 1000 chars
     pub amount: u64,
     pub open_time: u64,
-    pub answers: Vec<String>, //20 answers total 5660
+    pub answers: Vec<Pubkey>, //20 answers total 5660
     pub is_open: bool,
     pub questioner_key: Pubkey,
     pub bounty_tokens_bump: u8,
