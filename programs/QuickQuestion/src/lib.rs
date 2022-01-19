@@ -47,7 +47,7 @@ pub mod quick_question {
         Ok(())
     }
 
-    pub fn post_answer(ctx: Context<PostAnswer>) -> ProgramResult {
+    pub fn post_answer(ctx: Context<PostAnswer>, bump: u8) -> ProgramResult {
         Ok(())
     }
 
@@ -81,8 +81,31 @@ pub struct PostBounty<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(answer_tokens_bump: u8)]
 //There must be some financial disincentive to posting willy nilly. The responder must pay some sol to answer
-pub struct PostAnswer {}
+pub struct PostAnswer<'info> {
+    #[account(init, payer = responder, space = 291)]
+    answer: Account<'info, Answer>,
+    #[account(mut)]
+    responder: Signer<'info>,
+    //bounty: AccountInfo<'info, Bounty>,
+    #[account(mut, constraint = responder_tokens.mint == responder_mint.key())]
+    responder_tokens: Account<'info, TokenAccount>,
+    #[account(
+        init,
+        payer = responder,
+        seeds = [answer.key().as_ref()],
+        bump = answer_tokens_bump,
+        token::mint = responder_mint,
+        token::authority = answer_tokens, //Do we want this?
+    )]
+    answer_tokens: Account<'info, TokenAccount>,
+    responder_mint: Account<'info, Mint>,
+
+    token_program: Program<'info, Token>,
+    system_program: Program<'info, System>,
+    rent: Sysvar<'info, Rent>,
+}
 
 #[derive(Accounts)]
 pub struct CloseBounty {}

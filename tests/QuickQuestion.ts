@@ -15,6 +15,10 @@ describe('QuickQuestion', () => {
   let questionerMint: spl.Token;
   let questionerTokens: anchor.web3.PublicKey;
 
+  let responderMint: spl.Token;
+  let responderTokens: anchor.web3.PublicKey;
+  let bounty: anchor.web3.Keypair;
+
   before(async () => {
 
     const wallet = program.provider.wallet as NodeWallet;
@@ -30,11 +34,26 @@ describe('QuickQuestion', () => {
     questionerTokens = await questionerMint.createAssociatedTokenAccount(program.provider.wallet.publicKey);
 
     await questionerMint.mintTo(questionerTokens, program.provider.wallet.publicKey, [], anchor.web3.LAMPORTS_PER_SOL * 10);
+
+    responderMint = await spl.Token.createMint(
+      program.provider.connection,
+      wallet.payer,
+      wallet.publicKey,
+      wallet.publicKey,
+      0,
+      spl.TOKEN_PROGRAM_ID
+    );
+
+    responderTokens = await responderMint.createAssociatedTokenAccount(program.provider.wallet.publicKey);
+    await responderMint.mintTo(responderTokens, program.provider.wallet.publicKey, [], anchor.web3.LAMPORTS_PER_SOL * 10);
+
+
   });
 
   it('Bounty posted', async () => {
 
-    const bounty = anchor.web3.Keypair.generate();
+    bounty = anchor.web3.Keypair.generate();
+
     const [bountyTokens, bountiedTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
       [bounty.publicKey.toBuffer()],
       program.programId
@@ -86,8 +105,27 @@ describe('QuickQuestion', () => {
   });
 
   it('Answer posted', async () => {
+    const answer = anchor.web3.Keypair.generate();
+    const [answerTokens, answeredTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
+      [answer.publicKey.toBuffer()],
+      program.programId
+    );
+
     // Add your test here.
-    const tx = await program.rpc.postAnswer({});
+    const tx = await program.rpc.postAnswer(answeredTokensBump, {
+      accounts: {
+        answer: answer.publicKey,
+        responder: program.provider.wallet.publicKey,
+        responderTokens: responderTokens,
+        //bounty: bounty,
+        answerTokens: answerTokens,
+        responderMint: responderMint.publicKey,
+        tokenProgram: spl.TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        systemProgram: anchor.web3.SystemProgram.programId
+      },
+      signers: [answer]
+    });
     console.log("Your transaction signature", tx);
   });
 
