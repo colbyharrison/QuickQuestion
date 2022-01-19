@@ -32,20 +32,10 @@ describe('QuickQuestion', () => {
     await bountyMint.mintTo(questionerTokens, program.provider.wallet.publicKey, [], 1000);
   });
 
-  it('Bounty created', async () => {
-    const bountyLogger = anchor.web3.Keypair.generate();
-    await program.rpc.createBounty({
-      accounts: {
-        bounty: bountyLogger.publicKey
-      },
-      instructions: [
-        await program.account.bounty.createInstruction(bountyLogger),
-      ],
-      signers: [bountyLogger]
-    });
-  });
-
   it('Bounty posted', async () => {
+
+    let rentCalc = await anchor.getProvider().connection.getMinimumBalanceForRentExemption(28000, 'confirmed');
+    console.log(rentCalc / anchor.web3.LAMPORTS_PER_SOL) // 10240 = .07216128 (10 usd) sol 28000 = .19577 (27 usd) 
 
     const bounty = anchor.web3.Keypair.generate();
     const [bountyTokens, bountiedTokensBump] = await anchor.web3.PublicKey.findProgramAddress(

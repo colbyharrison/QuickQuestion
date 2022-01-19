@@ -13,10 +13,6 @@ pub mod quick_question {
         Ok(())
     }
 
-    pub fn create_bounty_history(ctx: Context<CreateBountyHistory>) -> ProgramResult {
-        Ok(())
-    }
-
     pub fn close_bounty(ctx: Context<CloseBounty>) -> ProgramResult {
         Ok(())
     }
@@ -36,8 +32,9 @@ pub mod quick_question {
 #[derive(Accounts)]
 #[instruction(bounty_tokens_bump: u8)]
 pub struct PostBounty<'info> {
-    #[account(init, payer = questioner, space = 500)]
-    bounty: Account<'info, Questioner>,
+    #[account(init, payer = questioner, space = 6780)]
+    //TODO Future improvement to move history offchain
+    bounty: Account<'info, Bounty>,
     #[account(mut)]
     questioner: Signer<'info>,
     questioner_tokens: Account<'info, TokenAccount>,
@@ -50,16 +47,10 @@ pub struct PostBounty<'info> {
         token::authority = bounty_tokens, //we're using the token account as authority over itself...
     )]
     bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens
-    bounty_mint: Account<'info, Mint>, //the minter for the token, not sure this is really needed...
+    bounty_mint: Account<'info, Mint>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
     rent: Sysvar<'info, Rent>,
-}
-
-#[derive(Accounts)]
-pub struct CreateBountyHistory<'info> {
-    #[account(zero)]
-    bounty: AccountLoader<'info, Bounty>,
 }
 
 #[derive(Accounts)]
@@ -86,24 +77,41 @@ pub struct Responder {
     bump: u8,
 }
 
-//as these accounts will be quite large we must use zero-copy as to not violate
-//stack and heap limitations. 4KB Stack and 32 KB heap
-#[account(zero_copy)]
+#[account]
+pub struct Answer {
+    //total 283
+    pub response: String, //limit to 250 chars
+    pub reponder_key: Pubkey,
+    was_accepted: bool,
+}
+
+#[account]
 pub struct Bounty {
-    pub title: [u8; 50],      //limit to 50 chars
-    pub question: [u8; 2500], //limit to 2500 chars
+    //total bytes 50 + 1000 +8 +8 +5660 + 1 + 32 + 1 = 6760
+    pub title: String,    //limit to 50 chars
+    pub question: String, //limit to 1000 chars
     pub amount: u64,
     pub open_time: u64,
-    pub answers: [Answer; 10], //10 answers total 25,330
+    pub answers: Vec<String>, //20 answers total 5660
     pub is_open: bool,
     pub questioner_key: Pubkey,
     pub bounty_tokens_bump: u8,
 }
 
-#[zero_copy]
-pub struct Answer {
-    //byte requirement = 2500+32+1 = 2533
-    pub response: [u8; 2500], //limit to 2500 chars
-    pub reponder_key: Pubkey,
-    was_accepted: bool,
-}
+// pub struct Bounty {
+//     pub title: [u8; 50],     //limit to 50 chars
+//     pub question: [u8; 500], //limit to 1000 chars
+//     pub amount: u64,
+//     pub open_time: u64,
+//     pub answers: [Answer; 20], //20 answers total 5660
+//     pub is_open: bool,
+//     pub questioner_key: Pubkey,
+//     pub bounty_tokens_bump: u8,
+// }
+// //Only Size Enough for 20 answers @ 250 chars each
+// pub struct Answer {
+//     //byte requirement = 250+32+1 = 283
+//     pub response: [u8; 250], //limit to 250 chars
+//     pub reponder_key: Pubkey,
+//     was_accepted: bool,
+// }
