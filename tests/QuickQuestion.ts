@@ -42,7 +42,15 @@ describe('QuickQuestion', () => {
       [bounty.publicKey.toBuffer()],
       program.programId
     );
-    const tx = await program.rpc.postBounty(bountiedTokensBump, {
+
+    const title = "Example Title";
+    const question = "Example question";
+    const amount = new anchor.BN(anchor.web3.LAMPORTS_PER_SOL);
+    const timeline = new anchor.BN(200);
+
+
+    const tx = await program.rpc.postBounty(
+      bountiedTokensBump, title, question, amount, timeline, {
       accounts: {
         bounty: bounty.publicKey,
         questioner: program.provider.wallet.publicKey,
@@ -55,7 +63,16 @@ describe('QuickQuestion', () => {
       },
       signers: [bounty]
     });
-    console.log("Your transaction signature", tx);
+
+    const bnty = await program.account.bounty.fetch(bounty.publicKey);
+
+    assert.ok(bnty.amount.eq(amount));
+    assert.ok(bnty.openTime.eq(timeline));
+    assert.ok(bnty.isOpen);
+    assert.equal(bnty.title, title);
+    assert.equal(bnty.question, question);
+    assert.ok(bnty.questionerKey.equals(program.provider.wallet.publicKey))
+    console.log("Bounty", bnty);
   });
 
   it('Bounty closed', async () => {

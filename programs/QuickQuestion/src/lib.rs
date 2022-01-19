@@ -9,7 +9,24 @@ declare_id!("G2HtxxNKWLSLjxL6dGf3Y9SgQtmaANMSZqUmPAugHu1r");
 #[program]
 pub mod quick_question {
     use super::*;
-    pub fn post_bounty(ctx: Context<PostBounty>, bump: u8) -> ProgramResult {
+    pub fn post_bounty(
+        ctx: Context<PostBounty>,
+        bump: u8,
+        title: String,
+        question: String,
+        bounty_lamports: u64,
+        bounty_timeline: u64,
+    ) -> ProgramResult {
+        let bounty = &mut ctx.accounts.bounty;
+        bounty.title = title;
+        bounty.question = question;
+        bounty.amount = bounty_lamports;
+        bounty.open_time = bounty_timeline;
+        bounty.is_open = true;
+        bounty.questioner_key = ctx.accounts.questioner.key();
+        bounty.bounty_tokens_bump = bump;
+
+        //Todo transfer bounty into escrow
         Ok(())
     }
 
