@@ -55,13 +55,15 @@ pub mod quick_question {
     ) -> ProgramResult {
         let answer = &mut ctx.accounts.answer;
         answer.response = response;
-        answer.reponder_key = ctx.accounts.responder.key();
+        answer.responder_key = ctx.accounts.responder.key();
         answer.was_accepted = false;
         answer.collateral_amount = collateral_lamports;
+        answer.answer_tokens_bump = bump;
 
         let bounty = &mut ctx.accounts.bounty;
 
         bounty.answers.push(answer.key());
+        answer.bounty_key = bounty.key();
 
         //transfer responder collateral into "escrow"
         anchor_spl::token::transfer(
@@ -110,7 +112,7 @@ pub struct PostBounty<'info> {
 #[instruction(answer_tokens_bump: u8)]
 //There must be some financial disincentive to posting willy nilly. The responder must pay some sol to answer
 pub struct PostAnswer<'info> {
-    #[account(init, payer = responder, space = 300)]
+    #[account(init, payer = responder, space = 338)]
     answer: Account<'info, Answer>,
     #[account(mut)]
     responder: Signer<'info>,
@@ -142,24 +144,26 @@ pub struct AcceptAnswer {}
 
 #[account]
 pub struct Answer {
-    //total 283 + 8
-    pub response: String, //limit to 250 chars
-    pub reponder_key: Pubkey,
+    //total 250 + 32 + 8 + 8 + 32 = 330
+    response: String, //limit to 250 chars
+    responder_key: Pubkey,
     was_accepted: bool,
     collateral_amount: u64,
+    bounty_key: Pubkey,
+    answer_tokens_bump: u8,
 }
 
 #[account]
 pub struct Bounty {
     //total bytes 50 + 1000 +8 +8 +5660 + 1 + 32 + 1 = 6760
-    pub title: String,    //limit to 50 chars
-    pub question: String, //limit to 1000 chars
-    pub amount: u64,
-    pub open_time: u64,
-    pub answers: Vec<Pubkey>, //20 answers total 5660
-    pub is_open: bool,
-    pub questioner_key: Pubkey,
-    pub bounty_tokens_bump: u8,
+    title: String,    //limit to 50 chars
+    question: String, //limit to 1000 chars
+    amount: u64,
+    open_time: u64,
+    answers: Vec<Pubkey>, //20 answers total 5660
+    is_open: bool,
+    questioner_key: Pubkey,
+    bounty_tokens_bump: u8,
 }
 
 // pub struct Bounty {

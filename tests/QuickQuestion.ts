@@ -86,10 +86,10 @@ describe('QuickQuestion', () => {
     assert.ok(bnty.isOpen);
     assert.equal(bnty.title, title);
     assert.equal(bnty.question, question);
-    assert.ok(bnty.questionerKey.equals(program.provider.wallet.publicKey))
+    assert.ok(bnty.questionerKey.equals(program.provider.wallet.publicKey));
 
-    const escrowedTokens = (await questionerMint.getAccountInfo(bountyTokens))
-    assert.equal(anchor.web3.LAMPORTS_PER_SOL, escrowedTokens.amount.toNumber())
+    const escrowedTokens = (await questionerMint.getAccountInfo(bountyTokens));
+    assert.equal(anchor.web3.LAMPORTS_PER_SOL, escrowedTokens.amount.toNumber());
   });
 
   it('Bounty closed', async () => {
@@ -130,10 +130,20 @@ describe('QuickQuestion', () => {
       },
       signers: [answer]
     });
-    const an = await program.account.answer.fetch(answer.publicKey);
-    // const bnty = await program.account.answer.fetch(bounty.publicKey);
+    const answerFetch = await program.account.answer.fetch(answer.publicKey);
+    const bnty = await program.account.bounty.fetch(bounty.publicKey);
 
-    console.log(an);
+    assert.ok(bnty.answers[0].equals(answer.publicKey));
+
+    assert.ok(answerFetch.collateralAmount.eq(collateral));
+    assert.equal(answerFetch.response, response);
+    assert.ok(answerFetch.responderKey.equals(program.provider.wallet.publicKey));
+    assert.ok(answerFetch.bountyKey.equals(bounty.publicKey));
+
+    const escrowedTokens = (await responderMint.getAccountInfo(answerTokens));
+    assert.equal(anchor.web3.LAMPORTS_PER_SOL, escrowedTokens.amount.toNumber());
+
+
   });
 
 });
