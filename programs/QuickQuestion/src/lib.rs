@@ -22,7 +22,7 @@ pub mod quick_question {
         bounty.question = question;
         bounty.amount = bounty_lamports;
         bounty.open_time = bounty_timeline;
-        bounty.is_open = true;
+        bounty.state = BountyState::Open;
         bounty.questioner_key = ctx.accounts.questioner.key();
         bounty.bounty_tokens_bump = bump;
 
@@ -43,10 +43,6 @@ pub mod quick_question {
         Ok(())
     }
 
-    pub fn accept_answer(ctx: Context<AcceptAnswer>) -> ProgramResult {
-        Ok(())
-    }
-
     pub fn post_answer(
         ctx: Context<PostAnswer>,
         bump: u8,
@@ -54,13 +50,14 @@ pub mod quick_question {
         collateral_lamports: u64,
     ) -> ProgramResult {
         let answer = &mut ctx.accounts.answer;
+        let bounty = &mut ctx.accounts.bounty;
+
+        require!(bounty.state == BountyState::Open, BountyError::BountyClosed);
         answer.response = response;
         answer.responder_key = ctx.accounts.responder.key();
         answer.was_accepted = false;
         answer.collateral_amount = collateral_lamports;
         answer.answer_tokens_bump = bump;
-
-        let bounty = &mut ctx.accounts.bounty;
 
         bounty.answers.push(answer.key());
         answer.bounty_key = bounty.key();
@@ -77,6 +74,22 @@ pub mod quick_question {
             ),
             collateral_lamports,
         )
+    }
+
+    pub fn accept_answer(ctx: Context<AcceptAnswer>) -> ProgramResult {
+        let accepted_answer = &mut ctx.accounts.answer;
+        let bounty = &mut ctx.accounts.bounty;
+
+        require!(bounty.state == BountyState::Open, BountyError::BountyClosed);
+        require!(
+            bounty.answers.contains(&accepted_answer.key()),
+            BountyError::AnswerNotFound
+        );
+
+        accepted_answer.was_accepted = true;
+        bounty.state = BountyState::Accepted;
+
+        Ok(())
     }
 
     // TODO: Not completely trustless if I need to rely on the client to call
@@ -140,7 +153,13 @@ pub struct PostAnswer<'info> {
 pub struct CloseBounty {}
 
 #[derive(Accounts)]
-pub struct AcceptAnswer {}
+pub struct AcceptAnswer<'info> {
+    #[account(mut)]
+    bounty: Account<'info, Bounty>,
+    questioner: Signer<'info>,
+    #[account(mut)]
+    answer: Account<'info, Answer>,
+}
 
 #[account]
 pub struct Answer {
@@ -161,9 +180,24 @@ pub struct Bounty {
     amount: u64,
     open_time: u64,
     answers: Vec<Pubkey>, //20 answers total 5660
-    is_open: bool,
+    state: BountyState,
     questioner_key: Pubkey,
     bounty_tokens_bump: u8,
+}
+
+#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, PartialEq)]
+pub enum BountyState {
+    Open,
+    Closed,
+    Accepted,
+}
+
+#[error]
+pub enum BountyError {
+    #[msg("Bounty Closed")]
+    BountyClosed,
+    #[msg("Answer Not Found")]
+    AnswerNotFound,
 }
 
 // pub struct Bounty {

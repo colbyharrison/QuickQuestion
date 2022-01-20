@@ -18,6 +18,8 @@ describe('QuickQuestion', () => {
   let responderMint: spl.Token;
   let responderTokens: anchor.web3.PublicKey;
   let bounty: anchor.web3.Keypair;
+  let answer: anchor.web3.Keypair;
+
 
   before(async () => {
 
@@ -80,10 +82,11 @@ describe('QuickQuestion', () => {
     });
 
     const bnty = await program.account.bounty.fetch(bounty.publicKey);
-
+    console.log(bnty.state);
     assert.ok(bnty.amount.eq(amount));
     assert.ok(bnty.openTime.eq(timeline));
-    assert.ok(bnty.isOpen);
+    // assert.equal(bnty.state, "{ open: {} }");
+
     assert.equal(bnty.title, title);
     assert.equal(bnty.question, question);
     assert.ok(bnty.questionerKey.equals(program.provider.wallet.publicKey));
@@ -98,14 +101,8 @@ describe('QuickQuestion', () => {
     console.log("Your transaction signature", tx);
   });
 
-  it('Answer accepted', async () => {
-    // Add your test here.
-    const tx = await program.rpc.acceptAnswer({});
-    console.log("Your transaction signature", tx);
-  });
-
   it('Answer posted', async () => {
-    const answer = anchor.web3.Keypair.generate();
+    answer = anchor.web3.Keypair.generate();
     const [answerTokens, answeredTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
       [answer.publicKey.toBuffer()],
       program.programId
@@ -135,6 +132,7 @@ describe('QuickQuestion', () => {
 
     assert.ok(bnty.answers[0].equals(answer.publicKey));
 
+    assert.ok(!answerFetch.wasAccepted);
     assert.ok(answerFetch.collateralAmount.eq(collateral));
     assert.equal(answerFetch.response, response);
     assert.ok(answerFetch.responderKey.equals(program.provider.wallet.publicKey));
@@ -142,8 +140,24 @@ describe('QuickQuestion', () => {
 
     const escrowedTokens = (await responderMint.getAccountInfo(answerTokens));
     assert.equal(anchor.web3.LAMPORTS_PER_SOL, escrowedTokens.amount.toNumber());
+  });
 
+  it('Answer posted when bounty closed', async () => { });
 
+  it('Answer accepted', async () => {
+    // Add your test here.
+    const tx = await program.rpc.acceptAnswer({
+      accounts: {
+        bounty: bounty.publicKey,
+        questioner: program.provider.wallet.publicKey,
+        answer: answer.publicKey
+      }
+    });
+
+    const answerFetch = await program.account.answer.fetch(answer.publicKey);
+
+    console.log(answerFetch);
+    assert.ok(answerFetch.wasAccepted);
   });
 
 });
