@@ -45,7 +45,6 @@ pub mod quick_question {
 
     pub fn post_answer(
         ctx: Context<PostAnswer>,
-        bump: u8,
         response: String,
         collateral_lamports: u64,
     ) -> ProgramResult {
@@ -57,18 +56,19 @@ pub mod quick_question {
         answer.responder_key = ctx.accounts.responder.key();
         answer.was_accepted = false;
         answer.collateral_amount = collateral_lamports;
-        answer.answer_tokens_bump = bump;
+        //answer.answer_tokens_bump = bump;
 
         bounty.answers.push(answer.key());
         answer.bounty_key = bounty.key();
+        msg!["We got here solana logs ftw"];
 
-        //transfer responder collateral into "escrow"
+        // transfer responder collateral into "escrow"
         anchor_spl::token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 anchor_spl::token::Transfer {
                     from: ctx.accounts.responder_tokens.to_account_info(),
-                    to: ctx.accounts.answer_tokens.to_account_info(),
+                    to: ctx.accounts.bounty_tokens.to_account_info(),
                     authority: ctx.accounts.responder.to_account_info(),
                 },
             ),
@@ -99,30 +99,28 @@ pub mod quick_question {
 #[derive(Accounts)]
 #[instruction(bounty_tokens_bump: u8)]
 pub struct PostBounty<'info> {
-    #[account(init, payer = questioner, space = 6780)]
-    //TODO Future improvement to move history offchain
+    #[account(init, payer = questioner, space = 1708)]
     bounty: Account<'info, Bounty>,
     #[account(mut)]
     questioner: Signer<'info>,
-    #[account(mut, constraint = questioner_tokens.mint == questioner_mint.key())]
+    #[account(mut, constraint = questioner_tokens.mint == bounty_mint.key())]
     questioner_tokens: Account<'info, TokenAccount>,
     #[account(
         init,
         payer = questioner,
         seeds = [bounty.key().as_ref()],
         bump = bounty_tokens_bump,
-        token::mint = questioner_mint,
+        token::mint = bounty_mint,
         token::authority = bounty_tokens, //we're using the token account as authority over itself...
     )]
     bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens
-    questioner_mint: Account<'info, Mint>,
+    bounty_mint: Account<'info, Mint>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
     rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
-#[instruction(answer_tokens_bump: u8)]
 //There must be some financial disincentive to posting willy nilly. The responder must pay some sol to answer
 pub struct PostAnswer<'info> {
     #[account(init, payer = responder, space = 338)]
@@ -131,18 +129,15 @@ pub struct PostAnswer<'info> {
     responder: Signer<'info>,
     #[account(mut)]
     bounty: Account<'info, Bounty>,
-    #[account(mut, constraint = responder_tokens.mint == responder_mint.key())]
+    #[account(mut)]
     responder_tokens: Account<'info, TokenAccount>,
     #[account(
-        init,
-        payer = responder,
-        seeds = [answer.key().as_ref()],
-        bump = answer_tokens_bump,
-        token::mint = responder_mint,
-        token::authority = answer_tokens, //Do we want this?
+        mut,
+        seeds = [bounty.key().as_ref()],
+        bump = bounty.bounty_tokens_bump,
     )]
-    answer_tokens: Account<'info, TokenAccount>,
-    responder_mint: Account<'info, Mint>,
+    bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens(from responder)
+    bounty_mint: Account<'info, Mint>,
 
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
@@ -169,17 +164,16 @@ pub struct Answer {
     was_accepted: bool,
     collateral_amount: u64,
     bounty_key: Pubkey,
-    answer_tokens_bump: u8,
 }
 
 #[account]
 pub struct Bounty {
-    //total bytes 50 + 1000 +8 +8 +5660 + 1 + 32 + 1 = 6760
+    //total bytes 50 + 1000 +8 +8 +1600 + 1 + 32 + 1 = 1700
     title: String,    //limit to 50 chars
     question: String, //limit to 1000 chars
     amount: u64,
     open_time: u64,
-    answers: Vec<Pubkey>, //20 answers total 5660
+    answers: Vec<Pubkey>, //50 answers total 50 * 32 = 1600
     state: BountyState,
     questioner_key: Pubkey,
     bounty_tokens_bump: u8,

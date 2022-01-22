@@ -20,6 +20,9 @@ describe('QuickQuestion', () => {
   let bounty: anchor.web3.Keypair;
   let answer: anchor.web3.Keypair;
 
+  let bountyTokens: anchor.web3.PublicKey;
+  let bountiedTokensBump: Number;
+
 
   before(async () => {
 
@@ -56,7 +59,7 @@ describe('QuickQuestion', () => {
 
     bounty = anchor.web3.Keypair.generate();
 
-    const [bountyTokens, bountiedTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
+    [bountyTokens, bountiedTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
       [bounty.publicKey.toBuffer()],
       program.programId
     );
@@ -73,7 +76,7 @@ describe('QuickQuestion', () => {
         questioner: program.provider.wallet.publicKey,
         questionerTokens: questionerTokens,
         bountyTokens: bountyTokens,
-        questionerMint: questionerMint.publicKey,
+        bountyMint: questionerMint.publicKey,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         systemProgram: anchor.web3.SystemProgram.programId
@@ -96,7 +99,6 @@ describe('QuickQuestion', () => {
   });
 
   it('Bounty closed', async () => {
-    // Add your test here.
     const tx = await program.rpc.closeBounty({});
     console.log("Your transaction signature", tx);
   });
@@ -111,16 +113,17 @@ describe('QuickQuestion', () => {
     const response = " This is an answer";
     const collateral = new anchor.BN(anchor.web3.LAMPORTS_PER_SOL);
 
+    console.log("answer:", answer.publicKey, "Bounty: ", bounty.publicKey, "ResponderTokens:", responderTokens,
+      "Bounty Toekns:", bountyTokens, "Questioner Mint: ", questionerMint.publicKey);
 
-    // Add your test here.
-    const tx = await program.rpc.postAnswer(answeredTokensBump, response, collateral, {
+    const tx = await program.rpc.postAnswer(response, collateral, {
       accounts: {
         answer: answer.publicKey,
         responder: program.provider.wallet.publicKey,
         bounty: bounty.publicKey,
-        responderTokens: responderTokens,
-        answerTokens: answerTokens,
-        responderMint: responderMint.publicKey,
+        responderTokens: questionerTokens,
+        bountyTokens: bountyTokens,
+        bountyMint: questionerMint.publicKey,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY
@@ -138,8 +141,8 @@ describe('QuickQuestion', () => {
     assert.ok(answerFetch.responderKey.equals(program.provider.wallet.publicKey));
     assert.ok(answerFetch.bountyKey.equals(bounty.publicKey));
 
-    const escrowedTokens = (await responderMint.getAccountInfo(answerTokens));
-    assert.equal(anchor.web3.LAMPORTS_PER_SOL, escrowedTokens.amount.toNumber());
+    const escrowedTokens = (await questionerMint.getAccountInfo(bountyTokens));
+    assert.equal(anchor.web3.LAMPORTS_PER_SOL * 2, escrowedTokens.amount.toNumber());
   });
 
   it('Answer posted when bounty closed', async () => { });
