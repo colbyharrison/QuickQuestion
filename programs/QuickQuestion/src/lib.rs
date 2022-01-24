@@ -14,13 +14,14 @@ pub mod quick_question {
         bump: u8,
         title: String,
         question: String,
-        bounty_lamports: u64,
-        bounty_timeline: u64,
+        bounty_tokens: u64,
+        bounty_timeline: u64, //TODO this needs to be time
     ) -> ProgramResult {
         let bounty = &mut ctx.accounts.bounty;
         bounty.title = title;
+        bounty.responders = Vec::new();
         bounty.question = question;
-        bounty.amount = bounty_lamports;
+        bounty.amount = bounty_tokens;
         bounty.open_time = bounty_timeline;
         bounty.state = BountyState::Open;
         bounty.questioner_key = ctx.accounts.questioner.key();
@@ -35,31 +36,74 @@ pub mod quick_question {
                     authority: ctx.accounts.questioner.to_account_info(),
                 },
             ),
-            bounty_lamports,
+            bounty_tokens,
         )
     }
 
     pub fn close_bounty(ctx: Context<CloseBounty>) -> ProgramResult {
+        let bounty = &ctx.accounts.bounty;
+
+        require!(
+            bounty.state == BountyState::Open || bounty.state == BountyState::Accepted,
+            BountyError::CantCloseClosedBounty
+        );
+
+        if bounty.state == BountyState::Open { //This should only occur @ or after deadline
+        }
+
+        if bounty.state == BountyState::Accepted { //Closing after accepting answer
+
+            //find accounts by pubkey?
+        }
+
+        //1 check state of bounty
+        //2 send collateral back to resp
+        //3 send bounty to winner
+        //4 send fees to me
+        //5 close accounts
+        // for responder in bounty.answers.iter() {
+        //     anchor_spl::token::transfer(
+        //         CpiContext::new(
+        //             ctx.accounts.token_program.to_account_info(),
+        //             anchor_spl::token::Transfer {
+        //                 from: ctx.accounts.questioner_tokens.to_account_info(),
+        //                 to: ctx.accounts.bounty_tokens.to_account_info(),
+        //                 authority: ctx.accounts.questioner.to_account_info(),
+        //             },
+        //         ),
+        //         bounty_tokens,
+        //     )
+        // }
+
         Ok(())
     }
 
     pub fn post_answer(
         ctx: Context<PostAnswer>,
         response: String,
-        collateral_lamports: u64,
+        collateral_amount: u64,
     ) -> ProgramResult {
         let answer = &mut ctx.accounts.answer;
         let bounty = &mut ctx.accounts.bounty;
 
-        require!(bounty.state == BountyState::Open, BountyError::BountyClosed);
+        require!(
+            bounty.state == BountyState::Open,
+            BountyError::CantAnswerClosedBounty
+        );
         answer.response = response;
         answer.responder_key = ctx.accounts.responder.key();
         answer.was_accepted = false;
-        answer.collateral_amount = collateral_lamports;
-        //answer.answer_tokens_bump = bump;
-
-        bounty.answers.push(answer.key());
+        answer.collateral_amount = collateral_amount;
         answer.bounty_key = bounty.key();
+
+        let responder = ResponderInfo {
+            responder_key: answer.responder_key,
+            answer_key: answer.key(),
+            collateral_amount: collateral_amount,
+            was_accepted: false,
+        };
+
+        bounty.responders.push(responder);
         msg!["We got here solana logs ftw"];
 
         // transfer responder collateral into "escrow"
@@ -72,7 +116,7 @@ pub mod quick_question {
                     authority: ctx.accounts.responder.to_account_info(),
                 },
             ),
-            collateral_lamports,
+            collateral_amount,
         )
     }
 
@@ -80,12 +124,18 @@ pub mod quick_question {
         let accepted_answer = &mut ctx.accounts.answer;
         let bounty = &mut ctx.accounts.bounty;
 
-        require!(bounty.state == BountyState::Open, BountyError::BountyClosed);
         require!(
-            bounty.answers.contains(&accepted_answer.key()),
-            BountyError::AnswerNotFound
+            bounty.state == BountyState::Open,
+            BountyError::CantAcceptClosedBounty
         );
 
+        let responder = bounty
+            .responders
+            .iter_mut()
+            .find(|&&mut x| x == accepted_answer.key());
+
+        require!(responder.is_some(), BountyError::AnswerNotFound);
+        responder.unwrap().was_accepted = true; //already explicitly handled none case
         accepted_answer.was_accepted = true;
         bounty.state = BountyState::Accepted;
 
@@ -99,7 +149,7 @@ pub mod quick_question {
 #[derive(Accounts)]
 #[instruction(bounty_tokens_bump: u8)]
 pub struct PostBounty<'info> {
-    #[account(init, payer = questioner, space = 1708)]
+    #[account(init, payer = questioner, space = 4758)]
     bounty: Account<'info, Bounty>,
     #[account(mut)]
     questioner: Signer<'info>,
@@ -137,15 +187,10 @@ pub struct PostAnswer<'info> {
         bump = bounty.bounty_tokens_bump,
     )]
     bounty_tokens: Account<'info, TokenAccount>, //here we store the bounty tokens(from responder)
-    bounty_mint: Account<'info, Mint>,
 
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
-    rent: Sysvar<'info, Rent>,
 }
-
-#[derive(Accounts)]
-pub struct CloseBounty {}
 
 #[derive(Accounts)]
 pub struct AcceptAnswer<'info> {
@@ -154,6 +199,21 @@ pub struct AcceptAnswer<'info> {
     questioner: Signer<'info>,
     #[account(mut)]
     answer: Account<'info, Answer>,
+}
+
+#[derive(Accounts)]
+pub struct CloseBounty<'info> {
+    #[account(mut)]
+    bounty: Account<'info, Bounty>,
+    questioner: Signer<'info>, //I want to be able to close the account without questioner needing to approve
+    #[account(
+        mut,
+        seeds = [bounty.key().as_ref()],
+        bump = bounty.bounty_tokens_bump,
+    )]
+    bounty_tokens: Account<'info, TokenAccount>,
+    token_program: Program<'info, Token>,
+    system_program: Program<'info, System>,
 }
 
 #[account]
@@ -168,15 +228,29 @@ pub struct Answer {
 
 #[account]
 pub struct Bounty {
-    //total bytes 50 + 1000 +8 +8 +1600 + 1 + 32 + 1 = 1700
+    //total bytes 50 + 1000 +8 +8 +2000 + 1 + 32 + 1 = 4750
     title: String,    //limit to 50 chars
     question: String, //limit to 1000 chars
     amount: u64,
     open_time: u64,
-    answers: Vec<Pubkey>, //50 answers total 50 * 32 = 1600
+    responders: Vec<ResponderInfo>, //50 answers total 50 * 73 = 3650
     state: BountyState,
     questioner_key: Pubkey,
     bounty_tokens_bump: u8,
+}
+
+#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct ResponderInfo {
+    responder_key: Pubkey,
+    answer_key: Pubkey,
+    collateral_amount: u64,
+    was_accepted: bool,
+}
+
+impl PartialEq<Pubkey> for ResponderInfo {
+    fn eq(&self, other: &Pubkey) -> bool {
+        self.answer_key == other.key()
+    }
 }
 
 #[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, PartialEq)]
@@ -188,26 +262,12 @@ pub enum BountyState {
 
 #[error]
 pub enum BountyError {
-    #[msg("Bounty Closed")]
-    BountyClosed,
+    #[msg("Can't Accept Closed Bounty")]
+    CantAcceptClosedBounty,
+    #[msg("Can't Close Closed Bounty")]
+    CantCloseClosedBounty,
+    #[msg("Cant Answer Closed Bounty")]
+    CantAnswerClosedBounty,
     #[msg("Answer Not Found")]
     AnswerNotFound,
 }
-
-// pub struct Bounty {
-//     pub title: [u8; 50],     //limit to 50 chars
-//     pub question: [u8; 500], //limit to 1000 chars
-//     pub amount: u64,
-//     pub open_time: u64,
-//     pub answers: [Answer; 20], //20 answers total 5660
-//     pub is_open: bool,
-//     pub questioner_key: Pubkey,
-//     pub bounty_tokens_bump: u8,
-// }
-// //Only Size Enough for 20 answers @ 250 chars each
-// pub struct Answer {
-//     //byte requirement = 250+32+1 = 283
-//     pub response: [u8; 250], //limit to 250 chars
-//     pub reponder_key: Pubkey,
-//     was_accepted: bool,
-// }

@@ -85,7 +85,6 @@ describe('QuickQuestion', () => {
     });
 
     const bnty = await program.account.bounty.fetch(bounty.publicKey);
-    console.log(bnty.state);
     assert.ok(bnty.amount.eq(amount));
     assert.ok(bnty.openTime.eq(timeline));
     // assert.equal(bnty.state, "{ open: {} }");
@@ -99,12 +98,13 @@ describe('QuickQuestion', () => {
   });
 
   it('Bounty closed', async () => {
-    const tx = await program.rpc.closeBounty({});
-    console.log("Your transaction signature", tx);
+    // const tx = await program.rpc.closeBounty({});
+    // console.log("Your transaction signature", tx);
   });
 
   it('Answer posted', async () => {
     answer = anchor.web3.Keypair.generate();
+    console.log(await program.provider.connection.getAccountInfo(answer.publicKey));
     const [answerTokens, answeredTokensBump] = await anchor.web3.PublicKey.findProgramAddress(
       [answer.publicKey.toBuffer()],
       program.programId
@@ -113,9 +113,6 @@ describe('QuickQuestion', () => {
     const response = " This is an answer";
     const collateral = new anchor.BN(anchor.web3.LAMPORTS_PER_SOL);
 
-    console.log("answer:", answer.publicKey, "Bounty: ", bounty.publicKey, "ResponderTokens:", responderTokens,
-      "Bounty Toekns:", bountyTokens, "Questioner Mint: ", questionerMint.publicKey);
-
     const tx = await program.rpc.postAnswer(response, collateral, {
       accounts: {
         answer: answer.publicKey,
@@ -123,17 +120,15 @@ describe('QuickQuestion', () => {
         bounty: bounty.publicKey,
         responderTokens: questionerTokens,
         bountyTokens: bountyTokens,
-        bountyMint: questionerMint.publicKey,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY
       },
       signers: [answer]
     });
     const answerFetch = await program.account.answer.fetch(answer.publicKey);
     const bnty = await program.account.bounty.fetch(bounty.publicKey);
 
-    assert.ok(bnty.answers[0].equals(answer.publicKey));
+    assert.ok(bnty.responders[0].answerKey.equals(answer.publicKey));
 
     assert.ok(!answerFetch.wasAccepted);
     assert.ok(answerFetch.collateralAmount.eq(collateral));
@@ -158,8 +153,9 @@ describe('QuickQuestion', () => {
     });
 
     const answerFetch = await program.account.answer.fetch(answer.publicKey);
+    const bnty = await program.account.bounty.fetch(bounty.publicKey);
 
-    console.log(answerFetch);
+    console.log(bnty);
     assert.ok(answerFetch.wasAccepted);
   });
 
