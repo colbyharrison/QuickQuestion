@@ -40,44 +40,6 @@ pub mod quick_question {
         )
     }
 
-    pub fn close_bounty(ctx: Context<CloseBounty>) -> ProgramResult {
-        let bounty = &ctx.accounts.bounty;
-
-        require!(
-            bounty.state == BountyState::Open || bounty.state == BountyState::Accepted,
-            BountyError::CantCloseClosedBounty
-        );
-
-        if bounty.state == BountyState::Open { //This should only occur @ or after deadline
-        }
-
-        if bounty.state == BountyState::Accepted { //Closing after accepting answer
-
-            //find accounts by pubkey?
-        }
-
-        //1 check state of bounty
-        //2 send collateral back to resp
-        //3 send bounty to winner
-        //4 send fees to me
-        //5 close accounts
-        // for responder in bounty.answers.iter() {
-        //     anchor_spl::token::transfer(
-        //         CpiContext::new(
-        //             ctx.accounts.token_program.to_account_info(),
-        //             anchor_spl::token::Transfer {
-        //                 from: ctx.accounts.questioner_tokens.to_account_info(),
-        //                 to: ctx.accounts.bounty_tokens.to_account_info(),
-        //                 authority: ctx.accounts.questioner.to_account_info(),
-        //             },
-        //         ),
-        //         bounty_tokens,
-        //     )
-        // }
-
-        Ok(())
-    }
-
     pub fn post_answer(
         ctx: Context<PostAnswer>,
         response: String,
@@ -101,10 +63,10 @@ pub mod quick_question {
             answer_key: answer.key(),
             collateral_amount: collateral_amount,
             was_accepted: false,
+            was_refunded: false,
         };
 
         bounty.responders.push(responder);
-        msg!["We got here solana logs ftw"];
 
         // transfer responder collateral into "escrow"
         anchor_spl::token::transfer(
@@ -118,6 +80,7 @@ pub mod quick_question {
             ),
             collateral_amount,
         )
+        // Ok(())
     }
 
     pub fn accept_answer(ctx: Context<AcceptAnswer>) -> ProgramResult {
@@ -132,18 +95,76 @@ pub mod quick_question {
         let responder = bounty
             .responders
             .iter_mut()
-            .find(|&&mut x| x == accepted_answer.key());
+            .find(|&&mut r| r.answer_key == accepted_answer.key());
 
         require!(responder.is_some(), BountyError::AnswerNotFound);
-        responder.unwrap().was_accepted = true; //already explicitly handled none case
+        responder.unwrap().was_accepted = true;
         accepted_answer.was_accepted = true;
         bounty.state = BountyState::Accepted;
 
         Ok(())
     }
 
-    // TODO: Not completely trustless if I need to rely on the client to call
-    // close when time is up. See lockup example it has a reference to time
+    pub fn close_bounty(ctx: Context<CloseBounty>) -> ProgramResult {
+        let bounty = &ctx.accounts.bounty;
+
+        require!(
+            bounty.state == BountyState::Open || bounty.state == BountyState::Accepted,
+            BountyError::CantCloseClosedBounty
+        );
+
+        Ok(())
+    }
+    pub fn close_responder_account(ctx: Context<CloseResponderAccount>) -> ProgramResult {
+        let bounty = &mut ctx.accounts.bounty;
+        let responder = &ctx.accounts.responder;
+        let amount = bounty.amount;
+
+        require!(
+            bounty.state == BountyState::Open || bounty.state == BountyState::Accepted,
+            BountyError::CantCloseClosedBounty
+        );
+        msg!("this is the responder key passed in: {}", 12);
+
+        let responder_data = bounty
+            .responders
+            .iter_mut()
+            .find(|&&mut r| r.responder_key == responder.key());
+
+        require!(responder_data.is_some(), BountyError::ResponderNotFound);
+        let resp = responder_data.unwrap();
+
+        require!(!resp.was_refunded, BountyError::ResponderAlreadyRefunded);
+
+        let reward = if resp.was_accepted {
+            amount.clone() + resp.collateral_amount //this seems wrong
+        } else {
+            resp.collateral_amount
+        };
+
+        anchor_spl::token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx.accounts.bounty_tokens.to_account_info(),
+                    to: ctx.accounts.responder_tokens.to_account_info(),
+                    authority: ctx.accounts.bounty_tokens.to_account_info(),
+                },
+                &[&[bounty.key().as_ref(), &[bounty.bounty_tokens_bump]]],
+            ),
+            reward,
+        )
+
+        //2 send collateral back to resp
+        //3 send bounty to winner
+        //4 close accounts
+        // if bounty.state == BountyState::Open { //This should only occur @ or after deadline
+        // }
+
+        // Ok(())
+    }
+
+    // TODO: Handle deadline
 }
 
 #[derive(Accounts)]
@@ -216,6 +237,27 @@ pub struct CloseBounty<'info> {
     system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct CloseResponderAccount<'info> {
+    #[account(mut)]
+    bounty: Account<'info, Bounty>,
+    #[account(mut)] //needed?
+    questioner: Signer<'info>,
+    #[account(mut)]
+    responder: AccountInfo<'info>, //I want to be able to close the account without questioner needing to approve
+    #[account(mut)]
+    responder_tokens: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [bounty.key().as_ref()],
+        bump = bounty.bounty_tokens_bump,
+    )]
+    bounty_tokens: Account<'info, TokenAccount>,
+    //bounty_mint: Account<'info, Mint>,
+    token_program: Program<'info, Token>,
+    system_program: Program<'info, System>,
+}
+
 #[account]
 pub struct Answer {
     //total 250 + 32 + 8 + 8 + 32 = 330
@@ -245,12 +287,7 @@ pub struct ResponderInfo {
     answer_key: Pubkey,
     collateral_amount: u64,
     was_accepted: bool,
-}
-
-impl PartialEq<Pubkey> for ResponderInfo {
-    fn eq(&self, other: &Pubkey) -> bool {
-        self.answer_key == other.key()
-    }
+    was_refunded: bool,
 }
 
 #[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, PartialEq)]
@@ -268,6 +305,10 @@ pub enum BountyError {
     CantCloseClosedBounty,
     #[msg("Cant Answer Closed Bounty")]
     CantAnswerClosedBounty,
+    #[msg("Responder Not Found")]
+    ResponderNotFound,
+    #[msg("Responder Already Refunded")]
+    ResponderAlreadyRefunded,
     #[msg("Answer Not Found")]
     AnswerNotFound,
 }
